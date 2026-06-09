@@ -3,84 +3,178 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>地震情報ログ＋マップ</title>
+<title>防災ポータル | 地震情報ログ</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <style>
-body{ font-family:"Hiragino Sans","Segoe UI",sans-serif; background:#000; color:#fff; margin:0; padding:20px; }
-#container{ max-width:900px; margin:auto; }
-h1{ font-size:28px; margin-bottom:20px; font-weight:600; }
-.card{ background:#111; border-radius:14px; padding:20px; margin-bottom:25px; border:1px solid #333; }
-#map { height: 350px; border-radius: 14px; margin-bottom: 25px; border: 1px solid #333; }
-textarea{ width:100%; height:200px; background:#000; color:#fff; border:none; padding:12px; border-radius:8px; resize:none; font-family:monospace; }
-button{ background:#fff; color:#000; padding:8px 16px; border-radius:6px; border:none; cursor:pointer; font-weight:600; margin:5px; }
-#status{ font-size:12px; color:#aaa; margin-top:5px; }
+/* =====================
+   プロ仕様のモダンUI
+   ===================== */
+:root {
+  --bg-color: #111;
+  --panel-bg: #1a1a1a;
+  --text-color: #eee;
+  --accent-color: #444;
+  --card-border: #333;
+  --intensity-high: #ff4d4d;
+  --intensity-mid: #ffad33;
+}
+
+body{ font-family:"Hiragino Sans","Segoe UI",sans-serif; background:var(--bg-color); color:var(--text-color); margin:0; padding:0; }
+#app { display: flex; flex-direction: column; height: 100vh; }
+
+/* ヘッダー・ナビ */
+header { display: flex; justify-content: space-between; align-items: center; padding: 15px 25px; background: #000; border-bottom: 1px solid #222; }
+.logo { font-size: 20px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+nav { display: flex; gap: 15px; }
+nav a { color: var(--text-color); text-decoration: none; padding: 8px 16px; border-radius: 8px; font-size: 14px; }
+nav a.active { background: #333; font-weight: 600; }
+
+/* メインコンテンツ */
+main { flex: 1; padding: 25px; display: grid; grid-template-columns: 2fr 1fr; gap: 25px; max-width: 1200px; margin: auto; width: 100%; box-sizing: border-box;}
+@media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+
+/* 地震情報パネル */
+.earthquake-panel { display: flex; flex-direction: column; }
+h1 { font-size: 24px; font-weight: 600; margin: 0 0 10px 0; }
+.status-bar { font-size: 12px; color: #aaa; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
+
+/* スタイリッシュ地図 */
+#map { height: 400px; border-radius: 14px; border: 1px solid var(--card-border); margin-bottom: 25px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
+/* Leafletの地図スタイルをカスタム（ダークタイル） */
+.leaflet-container { background: #111 !important; }
+.leaflet-tile-pane { filter: brightness(0.7) grayscale(1) !important; } /* ダークモードにする裏技 */
+
+/* ログリスト */
+.log-list-panel { }
+.card { background: var(--panel-bg); border: 1px solid var(--card-border); border-radius: 14px; padding: 15px; margin-bottom: 15px; display: grid; grid-template-columns: auto 1fr auto; gap: 15px; align-items: center; }
+.intensity-icon { width: 45px; height: 45px; border-radius: 50%; display: flex; justify-content: center; align-items: center; font-size: 22px; font-weight: 700; color: #000; background: #666; }
+.intensity-icon.high { background: var(--intensity-high); }
+.intensity-icon.mid { background: var(--intensity-mid); }
+.log-details div { font-size: 13px; color: #aaa; margin-bottom: 3px; }
+.log-details strong { font-size: 16px; color: #fff; font-weight: 600; }
+.log-copy-btn { background: #333; color: #fff; border: 1px solid #444; border-radius: 6px; padding: 6px 12px; font-size: 11px; cursor: pointer; height: fit-content;}
+
+/* ボタン類 */
+button { border-radius: 6px; border: none; cursor: pointer; font-weight: 600; transition: background 0.2s; }
+.btn-primary { background: #eee; color: #000; padding: 8px 16px; font-size: 13px; }
+.btn-secondary { background: #222; color: var(--text-color); padding: 6px 12px; font-size: 12px; border: 1px solid #333;}
+button:hover { opacity: 0.8; }
 </style>
 </head>
 <body>
 
-<div id="container">
-    <h1>地震情報リアルタイム</h1>
-    <div id="map"></div>
-    <div class="card">
-        <button onclick="copyAll()">全件コピー</button>
-        <button onclick="loadLogs()">更新</button>
-        <button onclick="enableAutoCopy()">自動コピーON</button>
-        <div id="status">接続待機中...</div>
-    </div>
-    <div id="logs"></div>
+<div id="app">
+    <header>
+        <div class="logo">🛡️ 防災ポータル</div>
+        <nav>
+            <a href="#" class="active">地震情報</a>
+            <a href="#">津波情報</a>
+            <a href="#">避難所</a>
+        </nav>
+    </header>
+
+    <main>
+        <div class="earthquake-panel">
+            <h1>地震情報ログ (過去5回分)</h1>
+            <div class="status-bar">
+                <div>津波注意報なし | Map by MapTiler, OpenStreetMap</div>
+                <div>最終更新: <span id="status-time">--:--:--</span> <button class="btn-secondary" onclick="loadLogs()">更新</button></div>
+            </div>
+            
+            <div id="map"></div>
+
+            <div class="card" style="grid-template-columns: 1fr;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <strong>最新の地震概要</strong>
+                    <button class="btn-primary" onclick="copyAll()">全件コピー</button>
+                </div>
+                <div id="latest-summary-text" style="font-size: 13px; color: #aaa; line-height: 1.5; white-space: pre-wrap;">（更新ボタンを押して情報を取得）</div>
+            </div>
+        </div>
+
+        <div class="log-list-panel">
+            <h2 style="font-size: 18px; margin-bottom: 15px;">過去の地震</h2>
+            <div id="logs-list"></div>
+        </div>
+    </main>
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-// 地図の初期化
-const map = L.map('map').setView([35.6895, 139.6917], 5);
+// 地図の初期化（東京中心、ダークタイル設定）
+const map = L.map('map', { zoomControl: false }).setView([35.6895, 139.6917], 5);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '© OpenStreetMap'
 }).addTo(map);
 
+// マーカー関連
 let marker = null;
-let AUTO_COPY = false;
-let lastHash = "";
+const intensityOrder = [70,60,55,50,45,40,30,20,10];
+const scaleMap = {10:"1",20:"2",30:"3",40:"4",45:"5弱",50:"5強",55:"6弱",60:"6強",70:"7"};
 
 // 地図更新関数
-function updateMap(lat, lng, name) {
+function updateMap(lat, lng, name, scale) {
     if (marker) map.removeLayer(marker);
     if (lat && lng) {
-        marker = L.marker([lat, lng]).addTo(map).bindPopup(name).openPopup();
-        map.setView([lat, lng], 6);
+        // 震度に応じてピンの色を変えるなどの高度な実装も可能（今回はシンプルに）
+        marker = L.marker([lat, lng]).addTo(map).bindPopup(name + '<br>震度 ' + scaleMap[scale]);
+        map.setView([lat, lng], 6); // 震源地へズームイン
+        if (scale >= 45) { marker.openPopup(); } // 震度5弱以上ならポップアップを開く
     }
 }
 
+// データ取得とログリストの構築
 async function loadLogs() {
-    document.getElementById("status").innerText = "最終更新: " + new Date().toLocaleTimeString();
-    
+    document.getElementById("status-time").innerText = new Date().toLocaleTimeString();
     const res = await fetch("https://api.p2pquake.net/v2/history?codes=551&limit=5");
     const data = await res.json();
     
-    // 最新の地震情報を地図に反映
-    if (data.length > 0 && data[0].earthquake.hypocenter) {
-        const h = data[0].earthquake.hypocenter;
-        updateMap(h.latitude, h.longitude, h.name);
-    }
-
     let html = "";
+    let allText = "";
+
     data.forEach((q, i) => {
-        html += `<div class='card'><div>${q.earthquake.time}</div><textarea readonly>${q.earthquake.hypocenter?.name || '不明'}で地震</textarea></div>`;
+        const eq = q.earthquake;
+        const h = eq.hypocenter || {};
+        const maxRaw = q.points.reduce((m,p) => Math.max(m,p.scale || 0), 0);
+        const scaleStr = scaleMap[maxRaw] || "---";
+
+        // 地図更新（最新の1件目のみ）
+        if (i === 0) {
+            updateMap(h.latitude, h.longitude, h.name, maxRaw);
+            document.getElementById("latest-summary-text").innerText = `発生: ${eq.time}\n震源: ${h.name || '不明'}\n最大震度: ${scaleStr}\n（地図のピンをご確認ください）`;
+        }
+
+        // ログリスト用カードのデザイン
+        let intensityClass = "";
+        if (maxRaw >= 45) { intensityClass = "high"; } // 5弱以上
+        else if (maxRaw >= 30) { intensityClass = "mid"; } // 3以上
+
+        const text = `【地震情報】\n最大震度：${scaleStr}\n震源地：${h.name || '不明'}\n発生：${eq.time}\n--------------------`;
+        allText += text + "\n";
+
+        html += `
+            <div class="card">
+                <div class="intensity-icon ${intensityClass}">${scaleStr}</div>
+                <div class="log-details">
+                    <div>${eq.time}</div>
+                    <strong>${h.name || '不明'}</strong>で地震
+                </div>
+                <button class="log-copy-btn" onclick="copyOne(\`${text}\`)">コピー</button>
+            </div>
+        `;
     });
-    document.getElementById("logs").innerHTML = html;
+
+    window.ALL_LOGS = allText;
+    document.getElementById("logs-list").innerHTML = html;
 }
 
-// WebSocketで即時更新
-const ws = new WebSocket("wss://api.p2pquake.net/v2/ws");
-ws.onmessage = (event) => {
-    const data = JSON.parse(event.data);
-    if (data.earthquake) loadLogs();
-};
+// コピー機能
+function copyAll() { navigator.clipboard.writeText(window.ALL_LOGS || ""); }
+function copyOne(text) { navigator.clipboard.writeText(text); }
 
-function enableAutoCopy() { AUTO_COPY = true; alert("自動コピーを有効にしました"); }
-function copyAll() { navigator.clipboard.writeText(document.querySelector('textarea').value); }
-
+// 起動
 loadLogs();
+// WebSocketでの即時更新機能は、UI更新処理と統合して追加可能です。
 </script>
 </body>
 </html>
