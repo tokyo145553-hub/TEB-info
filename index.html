@@ -7,8 +7,6 @@
     <style>
         body { font-family: sans-serif; margin: 0; background: #f0f2f5; display: flex; flex-direction: column; min-height: 100vh; }
         header { background: #333; color: #fff; padding: 1.5rem; text-align: center; }
-        
-        /* ボタン配置用レイアウト */
         .menu-container {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -19,8 +17,6 @@
             width: 100%;
             box-sizing: border-box;
         }
-
-        /* ボタンデザイン */
         .menu-btn {
             background: #fff;
             padding: 20px;
@@ -38,14 +34,9 @@
     </style>
 </head>
 <body>
-
-<header>
-    <h1>防災ポータル</h1>
-</header>
-
-<main class="menu-container">
-    <a href="earthquake.html" class="menu-btn">地震情報<span>震源・震度情報など</span></a>
-</main>
-
+    <header><h1>防災ポータル</h1></header>
+    <main class="menu-container">
+        <a href="earthquake.html" class="menu-btn">地震情報<span>震源・震度情報など</span></a>
+    </main>
 </body>
 </html>
