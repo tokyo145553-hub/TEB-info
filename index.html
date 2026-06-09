@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>地震情報ログ＋マップ</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+body{ font-family:"Hiragino Sans","Segoe UI",sans-serif; background:#000; color:#fff; margin:0; padding:20px; }
+#container{ max-width:900px; margin:auto; }
+h1{ font-size:28px; margin-bottom:20px; font-weight:600; }
+.card{ background:#111; border-radius:14px; padding:20px; margin-bottom:25px; border:1px solid #333; }
+#map { height: 350px; border-radius: 14px; margin-bottom: 25px; border: 1px solid #333; }
+textarea{ width:100%; height:200px; background:#000; color:#fff; border:none; padding:12px; border-radius:8px; resize:none; font-family:monospace; }
+button{ background:#fff; color:#000; padding:8px 16px; border-radius:6px; border:none; cursor:pointer; font-weight:600; margin:5px; }
+#status{ font-size:12px; color:#aaa; margin-top:5px; }
+</style>
+</head>
+<body>
+
+<div id="container">
+    <h1>地震情報リアルタイム</h1>
+    <div id="map"></div>
+    <div class="card">
+        <button onclick="copyAll()">全件コピー</button>
+        <button onclick="loadLogs()">更新</button>
+        <button onclick="enableAutoCopy()">自動コピーON</button>
+        <div id="status">接続待機中...</div>
+    </div>
+    <div id="logs"></div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// 地図の初期化
+const map = L.map('map').setView([35.6895, 139.6917], 5);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap'
+}).addTo(map);
+
+let marker = null;
+let AUTO_COPY = false;
+let lastHash = "";
+
+// 地図更新関数
+function updateMap(lat, lng, name) {
+    if (marker) map.removeLayer(marker);
+    if (lat && lng) {
+        marker = L.marker([lat, lng]).addTo(map).bindPopup(name).openPopup();
+        map.setView([lat, lng], 6);
+    }
+}
+
+async function loadLogs() {
+    document.getElementById("status").innerText = "最終更新: " + new Date().toLocaleTimeString();
+    
+    const res = await fetch("https://api.p2pquake.net/v2/history?codes=551&limit=5");
+    const data = await res.json();
+    
+    // 最新の地震情報を地図に反映
+    if (data.length > 0 && data[0].earthquake.hypocenter) {
+        const h = data[0].earthquake.hypocenter;
+        updateMap(h.latitude, h.longitude, h.name);
+    }
+
+    let html = "";
+    data.forEach((q, i) => {
+        html += `<div class='card'><div>${q.earthquake.time}</div><textarea readonly>${q.earthquake.hypocenter?.name || '不明'}で地震</textarea></div>`;
+    });
+    document.getElementById("logs").innerHTML = html;
+}
+
+// WebSocketで即時更新
+const ws = new WebSocket("wss://api.p2pquake.net/v2/ws");
+ws.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+    if (data.earthquake) loadLogs();
+};
+
+function enableAutoCopy() { AUTO_COPY = true; alert("自動コピーを有効にしました"); }
+function copyAll() { navigator.clipboard.writeText(document.querySelector('textarea').value); }
+
+loadLogs();
+</script>
+</body>
+</html>
