@@ -2,98 +2,68 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>地震情報詳細 - 防災ポータル</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
         body { background: #121212; color: #fff; margin: 0; font-family: sans-serif; }
-        header { background: #d32f2f; padding: 1rem; text-align: center; }
         .content { max-width: 900px; margin: 0 auto; padding: 20px; }
-        #map { height: 400px; width: 100%; border: 1px solid #444; margin-top: 10px; border-radius: 8px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; background: #1e1e1e; }
-        th, td { padding: 12px; border: 1px solid #333; text-align: left; }
-        .back-btn { display: inline-block; margin-bottom: 10px; color: #fff; text-decoration: none; }
-        #intensity-list { margin-top: 20px; padding: 15px; background: #1e1e1e; border: 1px solid #333; border-radius: 8px; }
+        #map { height: 400px; width: 100%; border: 1px solid #444; border-radius: 8px; }
+        #intensity-list { margin-top: 20px; padding: 15px; background: #1e1e1e; border-radius: 8px; }
     </style>
 </head>
 <body>
 
-<header><h1>地震情報詳細</h1></header>
-
 <main class="content">
-    <a href="index.html" class="back-btn">← ホームに戻る</a>
     <div id="map"></div>
-    <table>
-        <tr><th>発生時刻</th><td id="time">-</td></tr>
-        <tr><th>震源地</th><td id="location">-</td></tr>
-        <tr><th>最大震度</th><td id="intensity">-</td></tr>
-    </table>
-    
     <div id="intensity-list">
-        <h3>各地の震度</h3>
-        <div id="intensity-text">データ取得中...</div>
+        <h3>各地の震度詳細</h3>
+        <div id="intensity-text">データ解析中...</div>
     </div>
 </main>
 
 <script>
-    function formatScale(s) {
-        const scale = parseInt(s);
-        const map = {10:"1", 20:"2", 30:"3", 40:"4", 45:"5弱", 50:"5強", 55:"6弱", 60:"6強", 70:"7"};
-        return map[scale] || s;
-    }
-
-    const map = L.map('map').setView([37.0, 140.0], 6); // 福島県周辺を見やすく調整
+    const map = L.map('map').setView([37.0, 140.0], 6);
     L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { attribution: '&copy; CartoDB' }).addTo(map);
 
     fetch("https://api.p2pquake.net/v2/history?codes=551&limit=1")
-        .then(res => res.json())
-        .then(data => {
-            const q = data[0];
-            document.getElementById('time').textContent = q.earthquake.time;
-            document.getElementById('location').textContent = q.earthquake.hypocenter.name;
-            document.getElementById('intensity').textContent = formatScale(q.earthquake.maxScale);
+    .then(res => res.json())
+    .then(data => {
+        const q = data[0];
+        const points = q.points || [];
+        const grouped = {};
 
-            L.marker([q.earthquake.hypocenter.latitude, q.earthquake.hypocenter.longitude]).addTo(map);
-
-            const colorMap = {"1":"#888","2":"#3399ff","3":"#00cc00","4":"#ffff00","5弱":"#ff9900","5強":"#ff6600","6弱":"#ff0000","6強":"#cc0000","7":"#cc00cc"};
-            const grouped = {};
-
-            // 震度データの存在確認
-            if(q.points && q.points.length > 0) {
-                q.points.forEach(p => {
-                    const s = formatScale(p.scale);
-                    
-                    // 1. 地図にプロット（緯度経度がある場合のみ）
-                    if(p.lat && p.lng) {
-                        const icon = L.divIcon({
-                            className: 'scale-label',
-                            html: `<div style="font-size:10px; font-weight:bold; color:#fff; background:${colorMap[s]||'#ffcc00'}; padding:1px 3px; border-radius:3px; border:1px solid #000;">${s}</div>`,
-                            iconSize: [25, 20]
-                        });
-                        L.marker([p.lat, p.lng], { icon: icon }).addTo(map).bindPopup(`${p.addr}: 震度${s}`);
-                    }
-
-                    // 2. リスト集計（都道府県ごとにグループ化）
-                    if(!grouped[s]) grouped[s] = {};
-                    if(!grouped[s][p.pref]) grouped[s][p.pref] = [];
-                    grouped[s][p.pref].push(p.addr);
-                });
-
-                // リストHTML生成
-                let html = "";
-                Object.keys(grouped).sort().reverse().forEach(s => {
-                    html += `<div style="margin-bottom:10px;"><strong>震度 ${s}</strong><br>`;
-                    for (const pref in grouped[s]) {
-                        html += `<small style="color:#aaa">${pref}:</small> ${grouped[s][pref].join('、')}<br>`;
-                    }
-                    html += `</div>`;
-                });
-                document.getElementById('intensity-text').innerHTML = html;
-            } else {
-                document.getElementById('intensity-text').innerHTML = "地点震度データは現在提供されていません。";
+        points.forEach(p => {
+            // 震度コードを変換
+            const s = {10:"1", 20:"2", 30:"3", 40:"4", 45:"5弱", 50:"5強", 55:"6弱", 60:"6強", 70:"7"}[p.scale] || p.scale;
+            
+            // 1. 地図プロット（緯度経度がある場合のみ実行）
+            if (p.lat !== undefined && p.lng !== undefined) {
+                L.circleMarker([p.lat, p.lng], {
+                    radius: 6,
+                    fillColor: "#ffcc00",
+                    color: "#000",
+                    fillOpacity: 0.9
+                }).addTo(map).bindPopup(`${p.addr}: 震度${s}`);
             }
+
+            // 2. リスト集計
+            if(!grouped[s]) grouped[s] = {};
+            if(!grouped[s][p.pref]) grouped[s][p.pref] = [];
+            grouped[s][p.pref].push(p.addr);
         });
+
+        // リスト生成
+        let html = "";
+        Object.keys(grouped).sort().reverse().forEach(s => {
+            html += `<div><strong>震度 ${s}</strong><br>`;
+            for (const pref in grouped[s]) {
+                html += `<small style="color:#aaa">${pref}:</small> ${grouped[s][pref].join('、')}<br>`;
+            }
+            html += `</div><hr style="border:0; border-top:1px solid #333;">`;
+        });
+        document.getElementById('intensity-text').innerHTML = html || "観測データがありません";
+    });
 </script>
 </body>
 </html>
