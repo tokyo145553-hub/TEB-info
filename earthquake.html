@@ -10,10 +10,11 @@
         body { background: #121212; color: #fff; margin: 0; font-family: sans-serif; }
         header { background: #d32f2f; padding: 1rem; text-align: center; }
         .content { max-width: 900px; margin: 0 auto; padding: 20px; }
-        #map { height: 500px; width: 100%; border: 1px solid #444; margin-top: 10px; border-radius: 8px; }
+        #map { height: 400px; width: 100%; border: 1px solid #444; margin-top: 10px; border-radius: 8px; }
         table { width: 100%; border-collapse: collapse; margin-top: 20px; background: #1e1e1e; }
         th, td { padding: 12px; border: 1px solid #333; text-align: left; }
         .back-btn { display: inline-block; margin-bottom: 10px; color: #fff; text-decoration: none; }
+        #intensity-list { margin-top: 20px; padding: 15px; background: #1e1e1e; border: 1px solid #333; border-radius: 8px; }
     </style>
 </head>
 <body>
@@ -22,59 +23,69 @@
 
 <main class="content">
     <a href="index.html" class="back-btn">← ホームに戻る</a>
-    
     <div id="map"></div>
-    
     <table>
         <tr><th>発生時刻</th><td id="time">-</td></tr>
         <tr><th>震源地</th><td id="location">-</td></tr>
         <tr><th>最大震度</th><td id="intensity">-</td></tr>
     </table>
+    
+    <div id="intensity-list">
+        <h3>各地の震度（都道府県別）</h3>
+        <div id="intensity-text">情報を取得中...</div>
+    </div>
 </main>
 
 <script>
-    // 震度数値を人間が見やすい表記に変換
     function formatScale(s) {
         const scale = parseInt(s);
-        const map = {
-            10: "1", 20: "2", 30: "3", 40: "4", 
-            45: "5弱", 50: "5強", 55: "6弱", 60: "6強", 70: "7"
-        };
+        const map = {10:"1", 20:"2", 30:"3", 40:"4", 45:"5弱", 50:"5強", 55:"6弱", 60:"6強", 70:"7"};
         return map[scale] || s;
     }
 
-    // 地図初期化
     const map = L.map('map').setView([36.0, 138.0], 5);
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-        attribution: '&copy; CartoDB'
-    }).addTo(map);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { attribution: '&copy; CartoDB' }).addTo(map);
 
-    // データ取得
     fetch("https://api.p2pquake.net/v2/history?codes=551&limit=1")
         .then(res => res.json())
         .then(data => {
-            const q = data[0].earthquake;
-            document.getElementById('time').textContent = q.time;
-            document.getElementById('location').textContent = q.hypocenter.name;
-            document.getElementById('intensity').textContent = formatScale(q.maxScale);
+            const quake = data[0];
+            document.getElementById('time').textContent = quake.earthquake.time;
+            document.getElementById('location').textContent = quake.earthquake.hypocenter.name;
+            document.getElementById('intensity').textContent = formatScale(quake.earthquake.maxScale);
 
-            // 震央マーカー
-            L.marker([q.hypocenter.latitude, q.hypocenter.longitude]).addTo(map)
-             .bindPopup("震源: " + q.hypocenter.name);
+            L.marker([quake.earthquake.hypocenter.latitude, quake.earthquake.hypocenter.longitude]).addTo(map);
 
-            // 各地点の震度ラベルを地図に配置
-            data[0].points.forEach(p => {
-                const scaleText = formatScale(p.scale);
+            const colorMap = {"1":"#888","2":"#3399ff","3":"#00cc00","4":"#ffff00","5弱":"#ff9900","5強":"#ff6600","6弱":"#ff0000","6強":"#cc0000","7":"#cc00cc"};
+            const grouped = {}; // 地点リスト用
+
+            quake.points.forEach(p => {
+                const s = formatScale(p.scale);
+                // 地図ラベル表示
                 const icon = L.divIcon({
                     className: 'scale-label',
-                    html: `<div style="font-size:10px; font-weight:bold; color:white; background:rgba(0,0,0,0.6); padding:2px 4px; border-radius:3px; border:1px solid #555;">${scaleText}</div>`,
+                    html: `<div style="font-size:10px; font-weight:bold; color:#fff; background:${colorMap[s]||'#ffcc00'}; padding:1px 3px; border-radius:3px; border:1px solid #000;">${s}</div>`,
                     iconSize: [25, 20]
                 });
-                L.marker([p.lat, p.lng], { icon: icon }).addTo(map)
-                 .bindPopup(p.addr + " 震度" + scaleText);
+                L.marker([p.lat, p.lng], { icon: icon }).addTo(map).bindPopup(`${p.addr}: 震度${s}`);
+
+                // リスト集計用
+                if(!grouped[s]) grouped[s] = {};
+                if(!grouped[s][p.pref]) grouped[s][p.pref] = [];
+                grouped[s][p.pref].push(p.addr);
             });
+
+            // リストのHTML生成
+            let html = "";
+            Object.keys(grouped).sort().reverse().forEach(s => {
+                html += `<div style="margin-bottom:10px;"><strong>震度 ${s}</strong><br>`;
+                for (const pref in grouped[s]) {
+                    html += `<small>${pref}:</small> ${grouped[s][pref].join('、')}<br>`;
+                }
+                html += `</div>`;
+            });
+            document.getElementById('intensity-text').innerHTML = html;
         });
 </script>
-
 </body>
 </html>
