@@ -31,8 +31,8 @@
     </table>
     
     <div id="intensity-list">
-        <h3>各地の震度（都道府県別）</h3>
-        <div id="intensity-text">情報を取得中...</div>
+        <h3>各地の震度</h3>
+        <div id="intensity-text">データ取得中...</div>
     </div>
 </main>
 
@@ -43,48 +43,56 @@
         return map[scale] || s;
     }
 
-    const map = L.map('map').setView([36.0, 138.0], 5);
+    const map = L.map('map').setView([37.0, 140.0], 6); // 福島県周辺を見やすく調整
     L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { attribution: '&copy; CartoDB' }).addTo(map);
 
     fetch("https://api.p2pquake.net/v2/history?codes=551&limit=1")
         .then(res => res.json())
         .then(data => {
-            const quake = data[0];
-            document.getElementById('time').textContent = quake.earthquake.time;
-            document.getElementById('location').textContent = quake.earthquake.hypocenter.name;
-            document.getElementById('intensity').textContent = formatScale(quake.earthquake.maxScale);
+            const q = data[0];
+            document.getElementById('time').textContent = q.earthquake.time;
+            document.getElementById('location').textContent = q.earthquake.hypocenter.name;
+            document.getElementById('intensity').textContent = formatScale(q.earthquake.maxScale);
 
-            L.marker([quake.earthquake.hypocenter.latitude, quake.earthquake.hypocenter.longitude]).addTo(map);
+            L.marker([q.earthquake.hypocenter.latitude, q.earthquake.hypocenter.longitude]).addTo(map);
 
             const colorMap = {"1":"#888","2":"#3399ff","3":"#00cc00","4":"#ffff00","5弱":"#ff9900","5強":"#ff6600","6弱":"#ff0000","6強":"#cc0000","7":"#cc00cc"};
-            const grouped = {}; // 地点リスト用
+            const grouped = {};
 
-            quake.points.forEach(p => {
-                const s = formatScale(p.scale);
-                // 地図ラベル表示
-                const icon = L.divIcon({
-                    className: 'scale-label',
-                    html: `<div style="font-size:10px; font-weight:bold; color:#fff; background:${colorMap[s]||'#ffcc00'}; padding:1px 3px; border-radius:3px; border:1px solid #000;">${s}</div>`,
-                    iconSize: [25, 20]
+            // 震度データの存在確認
+            if(q.points && q.points.length > 0) {
+                q.points.forEach(p => {
+                    const s = formatScale(p.scale);
+                    
+                    // 1. 地図にプロット（緯度経度がある場合のみ）
+                    if(p.lat && p.lng) {
+                        const icon = L.divIcon({
+                            className: 'scale-label',
+                            html: `<div style="font-size:10px; font-weight:bold; color:#fff; background:${colorMap[s]||'#ffcc00'}; padding:1px 3px; border-radius:3px; border:1px solid #000;">${s}</div>`,
+                            iconSize: [25, 20]
+                        });
+                        L.marker([p.lat, p.lng], { icon: icon }).addTo(map).bindPopup(`${p.addr}: 震度${s}`);
+                    }
+
+                    // 2. リスト集計（都道府県ごとにグループ化）
+                    if(!grouped[s]) grouped[s] = {};
+                    if(!grouped[s][p.pref]) grouped[s][p.pref] = [];
+                    grouped[s][p.pref].push(p.addr);
                 });
-                L.marker([p.lat, p.lng], { icon: icon }).addTo(map).bindPopup(`${p.addr}: 震度${s}`);
 
-                // リスト集計用
-                if(!grouped[s]) grouped[s] = {};
-                if(!grouped[s][p.pref]) grouped[s][p.pref] = [];
-                grouped[s][p.pref].push(p.addr);
-            });
-
-            // リストのHTML生成
-            let html = "";
-            Object.keys(grouped).sort().reverse().forEach(s => {
-                html += `<div style="margin-bottom:10px;"><strong>震度 ${s}</strong><br>`;
-                for (const pref in grouped[s]) {
-                    html += `<small>${pref}:</small> ${grouped[s][pref].join('、')}<br>`;
-                }
-                html += `</div>`;
-            });
-            document.getElementById('intensity-text').innerHTML = html;
+                // リストHTML生成
+                let html = "";
+                Object.keys(grouped).sort().reverse().forEach(s => {
+                    html += `<div style="margin-bottom:10px;"><strong>震度 ${s}</strong><br>`;
+                    for (const pref in grouped[s]) {
+                        html += `<small style="color:#aaa">${pref}:</small> ${grouped[s][pref].join('、')}<br>`;
+                    }
+                    html += `</div>`;
+                });
+                document.getElementById('intensity-text').innerHTML = html;
+            } else {
+                document.getElementById('intensity-text').innerHTML = "地点震度データは現在提供されていません。";
+            }
         });
 </script>
 </body>
